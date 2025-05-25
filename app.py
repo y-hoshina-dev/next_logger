@@ -1,80 +1,127 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog
 from logger.serial_reader import open_serial_port, read_serial_data
-from logger.file_writer import get_log_file_path, write_log
+from logger.file_writer import generate_log_filename, write_csv, write_json
 import serial.tools.list_ports
+from datetime import datetime
+import os
 
 ser = None
-log_file_path = None
 is_logging = False
+log_file_path = ""
+log_format = "csv"
+save_dir = ""
 
 def get_serial_ports():
-    ports = serial.tools.list_ports.comports()
-    return [p.device for p in ports]
+    return [p.device for p in serial.tools.list_ports.comports()]
 
 def refresh_ports():
     ports = get_serial_ports()
     port_combo["values"] = ports
-    port_var.set(ports[0] if ports else "なし")
+    if ports:
+        port_var.set(ports[0])
+
+def select_save_dir():
+    global save_dir
+    save_dir = filedialog.askdirectory()
+    dir_label.config(text=save_dir if save_dir else "未選択")
 
 def start_logging():
-    global ser, is_logging, log_file_path
-    port = port_var.get()
-    baud = baud_var.get()
+    global ser, is_logging, log_file_path, log_format
 
-    try:
-        baud = int(baud)
-    except ValueError:
-        log_output.insert(tk.END, "ボーレートが不正です\n")
+    if not save_dir:
+        status_label.config(text="❗保存フォルダが未指定です")
         return
 
-    ser = open_serial_port(port, baud)
-    if ser:
-        log_file_path = get_log_file_path()
-        is_logging = True
-        log_output.insert(tk.END, f"開始: {port} @ {baud}bps\n")
-        root.after(100, read_loop)  # 100msごとに読み取り
-    else:
-        log_output.insert(tk.END, "ポートオープンに失敗しました\n")
+    product = product_var.get()
+    serial = serial_var.get()
+    comment = comment_var.get()
+    log_format = format_var.get()
+    filename = generate_log_filename(product, serial, comment, log_format)
+    log_file_path = os.path.join(save_dir, filename)
+
+    try:
+        ser = open_serial_port(port_var.get(), int(baud_var.get()))
+        if ser:
+            is_logging = True
+            status_label.config(text=f"✅ Logging to {filename}")
+            root.after(100, read_loop)
+        else:
+            status_label.config(text="❌ ポートオープン失敗")
+    except Exception as e:
+        status_label.config(text=f"エラー: {e}")
 
 def stop_logging():
     global is_logging
     is_logging = False
     if ser and ser.is_open:
         ser.close()
-        log_output.insert(tk.END, "停止\n")
+    status_label.config(text="⏹ 停止しました")
 
 def read_loop():
     if is_logging and ser:
         data = read_serial_data(ser)
         if data:
-            log_output.insert(tk.END, data + "\n")
-            write_log(log_file_path, data)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_output.insert(tk.END, f"{timestamp}: {data}\n")
             log_output.see(tk.END)
+            if log_format == "csv":
+                write_csv(log_file_path, timestamp, data)
+            else:
+                write_json(log_file_path, timestamp, data)
         root.after(100, read_loop)
 
-# --- GUI ---
+# --- GUI構築 ---
 root = tk.Tk()
-root.title("Serial Logger")
+root.title("Serial Logger GUI")
 
 frame = tk.Frame(root)
 frame.pack(padx=10, pady=10)
 
+# COMポート設定
 tk.Label(frame, text="COMポート:").grid(row=0, column=0)
 port_var = tk.StringVar()
 port_combo = ttk.Combobox(frame, textvariable=port_var, width=10)
 port_combo.grid(row=0, column=1)
 tk.Button(frame, text="再スキャン", command=refresh_ports).grid(row=0, column=2)
-refresh_ports()
 
 tk.Label(frame, text="ボーレート:").grid(row=1, column=0)
 baud_var = tk.StringVar(value="9600")
 tk.Entry(frame, textvariable=baud_var, width=10).grid(row=1, column=1)
 
-tk.Button(frame, text="Start", command=start_logging).grid(row=2, column=0, pady=10)
-tk.Button(frame, text="Stop", command=stop_logging).grid(row=2, column=1)
+# ファイル名入力
+tk.Label(frame, text="製品名:").grid(row=2, column=0)
+product_var = tk.StringVar()
+tk.Entry(frame, textvariable=product_var, width=15).grid(row=2, column=1)
 
-log_output = tk.Text(root, height=15, width=60)
+tk.Label(frame, text="シリアルNo:").grid(row=3, column=0)
+serial_var = tk.StringVar()
+tk.Entry(frame, textvariable=serial_var, width=15).grid(row=3, column=1)
+
+tk.Label(frame, text="コメント:").grid(row=4, column=0)
+comment_var = tk.StringVar()
+tk.Entry(frame, textvariable=comment_var, width=15).grid(row=4, column=1)
+
+# 保存先と形式
+tk.Label(frame, text="保存フォルダ:").grid(row=5, column=0)
+tk.Button(frame, text="参照", command=select_save_dir).grid(row=5, column=1)
+dir_label = tk.Label(frame, text="未選択", anchor="w", width=40)
+dir_label.grid(row=5, column=2)
+
+tk.Label(frame, text="保存形式:").grid(row=6, column=0)
+format_var = tk.StringVar(value="csv")
+tk.Radiobutton(frame, text="CSV", variable=format_var, value="csv").grid(row=6, column=1)
+tk.Radiobutton(frame, text="JSON", variable=format_var, value="json").grid(row=6, column=2)
+
+# スタート・ストップ
+tk.Button(frame, text="Start", command=start_logging).grid(row=7, column=0, pady=10)
+tk.Button(frame, text="Stop", command=stop_logging).grid(row=7, column=1)
+
+status_label = tk.Label(root, text="準備完了", fg="blue")
+status_label.pack()
+
+log_output = tk.Text(root, height=15, width=70)
 log_output.pack(padx=10, pady=10)
 
+refresh_ports()
 root.mainloop()
