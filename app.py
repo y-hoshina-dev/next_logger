@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
 from logger.serial_reader import open_serial_port, read_serial_data
-from logger.file_writer import generate_log_filename, write_csv, write_json
+from logger.file_writer import generate_log_filename, write_csv, write_json, write_txt
 import serial.tools.list_ports
 from datetime import datetime
 import os
@@ -67,18 +67,19 @@ def read_loop():
             log_output.see(tk.END)
             if log_format == "csv":
                 write_csv(log_file_path, timestamp, data)
-            else:
+            elif log_format == "json":
                 write_json(log_file_path, timestamp, data)
+            elif log_format == "txt":
+                write_txt(log_file_path, timestamp, data)
         root.after(100, read_loop)
 
-# --- GUI構築 ---
+# GUI構築
 root = tk.Tk()
 root.title("Serial Logger GUI")
 
 frame = tk.Frame(root)
 frame.pack(padx=10, pady=10)
 
-# COMポート設定
 tk.Label(frame, text="COMポート:").grid(row=0, column=0)
 port_var = tk.StringVar()
 port_combo = ttk.Combobox(frame, textvariable=port_var, width=10)
@@ -89,7 +90,6 @@ tk.Label(frame, text="ボーレート:").grid(row=1, column=0)
 baud_var = tk.StringVar(value="9600")
 tk.Entry(frame, textvariable=baud_var, width=10).grid(row=1, column=1)
 
-# ファイル名入力
 tk.Label(frame, text="製品名:").grid(row=2, column=0)
 product_var = tk.StringVar()
 tk.Entry(frame, textvariable=product_var, width=15).grid(row=2, column=1)
@@ -102,7 +102,6 @@ tk.Label(frame, text="コメント:").grid(row=4, column=0)
 comment_var = tk.StringVar()
 tk.Entry(frame, textvariable=comment_var, width=15).grid(row=4, column=1)
 
-# 保存先と形式
 tk.Label(frame, text="保存フォルダ:").grid(row=5, column=0)
 tk.Button(frame, text="参照", command=select_save_dir).grid(row=5, column=1)
 dir_label = tk.Label(frame, text="未選択", anchor="w", width=40)
@@ -112,8 +111,8 @@ tk.Label(frame, text="保存形式:").grid(row=6, column=0)
 format_var = tk.StringVar(value="csv")
 tk.Radiobutton(frame, text="CSV", variable=format_var, value="csv").grid(row=6, column=1)
 tk.Radiobutton(frame, text="JSON", variable=format_var, value="json").grid(row=6, column=2)
+tk.Radiobutton(frame, text="TXT", variable=format_var, value="txt").grid(row=6, column=3)
 
-# スタート・ストップ
 tk.Button(frame, text="Start", command=start_logging).grid(row=7, column=0, pady=10)
 tk.Button(frame, text="Stop", command=stop_logging).grid(row=7, column=1)
 

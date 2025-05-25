@@ -18,13 +18,20 @@ def write_csv(file_path, timestamp, data):
         writer.writerow([timestamp, data])
 
 def write_json(file_path, timestamp, data):
-    log_entry = {"timestamp": timestamp, "data": data}
+    entry = {"timestamp": timestamp, "data": data}
     if os.path.isfile(file_path):
         with open(file_path, "r+", encoding="utf-8") as f:
-            logs = json.load(f)
-            logs.append(log_entry)
+            try:
+                logs = json.load(f)
+            except json.JSONDecodeError:
+                logs = []
+            logs.append(entry)
             f.seek(0)
             json.dump(logs, f, indent=2)
     else:
         with open(file_path, "w", encoding="utf-8") as f:
-            json.dump([log_entry], f, indent=2)
+            json.dump([entry], f, indent=2)
+
+def write_txt(file_path, timestamp, data):
+    with open(file_path, "a", encoding="utf-8") as f:
+        f.write(f"{timestamp}: {data}\n")
