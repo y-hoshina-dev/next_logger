@@ -1,0 +1,6 @@
+﻿__pycache__/
+*.pyc
+.next_logger/
+build/
+dist/
+*.spec
