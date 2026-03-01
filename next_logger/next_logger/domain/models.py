@@ -34,7 +34,7 @@ class SessionConfig:
     date: str = ""
     save_dir: Path = Path(".")
     log_format: LogFormat = "txt"
-    error_keywords: tuple[str, ...] = ("ERROR", "ERR", "NG")
+    error_keywords: tuple[str, ...] = ("ERROR", "ERR", "FATAL", "CRITICAL", "EXCEPTION", "FAIL", "NG")
     resume_policy: ResumePolicy = "append"
     retention_max_sessions: int = 0
     retention_max_age_days: int = 0

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime
+from html import escape
 import os
 from pathlib import Path
 
@@ -26,11 +27,13 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStatusBar,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from next_logger.application import LoggerController
+from next_logger.application.log_markers import DEFAULT_CUSTOM_ERROR_KEYWORDS
 from next_logger.domain import AppState, ConnectionConfig, SessionConfig
 from next_logger.infrastructure import AppSettingsStore
 from .setup_wizard import SetupWizardDialog
@@ -49,7 +52,11 @@ BAUDRATE_OPTIONS = [
     "921600",
 ]
 
-GENERAL_ERROR_TOKENS = ("error", "err")
+LOG_MARKER_COLORS = {
+    "error": "#D32F2F",
+    "warning": "#B28704",
+    "info": "#1F2937",
+}
 
 PROMPT_TEMPLATE_CHOICES = [
     ("auto", "自動選択（推奨）"),
@@ -226,7 +233,7 @@ class MainWindow(QMainWindow):
         filter_bar.addWidget(self.filter_combo)
         outer.addLayout(filter_bar)
 
-        self.log_view = QPlainTextEdit()
+        self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.document().setMaximumBlockCount(5000)
         outer.addWidget(self.log_view)
@@ -234,7 +241,7 @@ class MainWindow(QMainWindow):
         ai_box = QGroupBox("AIプロンプト")
         ai_layout = QVBoxLayout(ai_box)
 
-        self.ai_detection_label = QLabel("一般エラー検出: 0件 (ERROR/ERR/error)")
+        self.ai_detection_label = QLabel("General marker detection: error=0 / warning=0")
         ai_layout.addWidget(self.ai_detection_label)
 
         ai_selector_row = QHBoxLayout()
@@ -284,7 +291,7 @@ class MainWindow(QMainWindow):
         self.format_combo = QComboBox()
         self.format_combo.addItems(["txt", "csv", "jsonl"])
 
-        self.error_keywords_edit = QLineEdit("ERROR,ERR,NG")
+        self.error_keywords_edit = QLineEdit(",".join(DEFAULT_CUSTOM_ERROR_KEYWORDS))
 
         self.resume_policy_combo = QComboBox()
         self.resume_policy_combo.addItem("同じファイルに追記", userData="append")
@@ -468,29 +475,53 @@ class MainWindow(QMainWindow):
         self._update_ai_recommendation()
 
     def _handle_line_event(self, event: dict[str, object]) -> None:
+        severity = str(event.get("severity", "error" if bool(event.get("is_error", False)) else "info"))
+        if severity not in LOG_MARKER_COLORS:
+            severity = "info"
+        marker_terms = tuple(str(item) for item in event.get("marker_terms", []))
         record = {
             "timestamp": str(event.get("timestamp", "")),
             "line": str(event.get("line", "")),
             "is_error": bool(event.get("is_error", False)),
+            "severity": severity,
+            "marker_terms": marker_terms,
             "write_ok": bool(event.get("write_ok", True)),
         }
         self._records.append(record)
 
         if self._record_matches(record):
-            self.log_view.appendPlainText(self._format_record(record))
+            self.log_view.append(self._format_record_html(record))
+
+    def _record_label(self, record: dict[str, object]) -> str:
+        severity = str(record.get("severity", "info"))
+        if bool(record.get("is_error", False)) or severity == "error":
+            return "ERROR"
+        if severity == "warning":
+            return "WARN"
+        return "INFO"
 
     def _format_record(self, record: dict[str, object]) -> str:
-        label = "[ERROR]" if bool(record["is_error"]) else "[INFO]"
+        label = f"[{self._record_label(record)}]"
         suffix = " [WRITE-FAILED]" if not bool(record["write_ok"]) else ""
         return f"{record['timestamp']} {label} {record['line']}{suffix}"
 
-    def _record_matches(self, record: dict[str, object]) -> bool:
-        mode = self.filter_combo.currentText()
-        is_error = bool(record["is_error"])
+    def _format_record_html(self, record: dict[str, object]) -> str:
+        text = escape(self._format_record(record))
+        severity = str(record.get("severity", "info"))
+        color = LOG_MARKER_COLORS.get(severity, LOG_MARKER_COLORS["info"])
+        marker_terms = tuple(str(item) for item in record.get("marker_terms", ()))
+        marker_hint = ""
+        if marker_terms:
+            marker_hint = f" <span style='color:#6B7280;'>({escape(','.join(marker_terms[:3]))})</span>"
+        return f"<span style='color:{color};'>{text}</span>{marker_hint}"
 
-        if mode == "エラーのみ" and not is_error:
+    def _record_matches(self, record: dict[str, object]) -> bool:
+        mode = self.filter_combo.currentIndex()
+        severity = str(record.get("severity", "error" if bool(record.get("is_error", False)) else "info"))
+
+        if mode == 1 and severity != "error":
             return False
-        if mode == "通常のみ" and is_error:
+        if mode == 2 and severity == "error":
             return False
 
         query = self.search_edit.text().strip().lower()
@@ -502,32 +533,37 @@ class MainWindow(QMainWindow):
         self.log_view.clear()
         for record in self._records:
             if self._record_matches(record):
-                self.log_view.appendPlainText(self._format_record(record))
+                self.log_view.append(self._format_record_html(record))
         self._update_ai_recommendation()
 
-    def _count_general_errors(self) -> int:
-        count = 0
+    def _count_marker_levels(self) -> tuple[int, int]:
+        error_count = 0
+        warning_count = 0
         for record in self._records:
-            line = str(record.get("line", "")).lower()
-            if any(token in line for token in GENERAL_ERROR_TOKENS):
-                count += 1
-        return count
+            severity = str(record.get("severity", "error" if bool(record.get("is_error", False)) else "info"))
+            if severity == "error":
+                error_count += 1
+            elif severity == "warning":
+                warning_count += 1
+        return error_count, warning_count
 
     def _recommended_prompt_key(self) -> str:
-        error_count = self._count_general_errors()
+        error_count, warning_count = self._count_marker_levels()
         stats = self.controller.get_stats_snapshot()
         if stats.write_failures > 0 or error_count >= 5:
             return "analyze_error"
         if error_count > 0:
             return "extract_error"
+        if warning_count > 0:
+            return "improvement"
         return "summary"
 
     def _update_ai_recommendation(self) -> None:
-        error_count = self._count_general_errors()
+        error_count, warning_count = self._count_marker_levels()
         recommended_key = self._recommended_prompt_key()
-        recommended_label = PROMPT_TEMPLATE_LABELS.get(recommended_key, "時系列要約")
+        recommended_label = PROMPT_TEMPLATE_LABELS.get(recommended_key, "summary")
         self.ai_detection_label.setText(
-            f"一般エラー検出: {error_count}件 (ERROR/ERR/error) / 推奨: {recommended_label}"
+            f"General marker detection: error={error_count} / warning={warning_count} / recommended: {recommended_label}"
         )
 
     def _resolve_prompt_key(self) -> str:

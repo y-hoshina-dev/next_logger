@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +14,7 @@ from next_logger.application.preflight import (
     normalize_error_keywords,
     run_preflight,
 )
+from next_logger.application.log_markers import classify_log_line
 from next_logger.domain import AppState, ConnectionConfig, SessionConfig, SessionStats, StateMachine
 from next_logger.infrastructure import (
     ProfileStore,
@@ -223,7 +223,12 @@ class LoggerController:
         session_data = payload.get("session", {})
         connection = ConnectionConfig(**connection_data)
         session_data["save_dir"] = Path(session_data.get("save_dir", "."))
-        session_data["error_keywords"] = tuple(session_data.get("error_keywords", ["ERROR", "ERR", "NG"]))
+        session_data["error_keywords"] = tuple(
+            session_data.get(
+                "error_keywords",
+                ["ERROR", "ERR", "FATAL", "CRITICAL", "EXCEPTION", "FAIL", "NG"],
+            )
+        )
         session = SessionConfig(**session_data)
         return connection, session
 
@@ -238,10 +243,6 @@ class LoggerController:
 
     def _normalize_session(self, session: SessionConfig) -> SessionConfig:
         return replace(session, error_keywords=normalize_error_keywords(session.error_keywords))
-
-    def _matches_error(self, line: str, keywords: Iterable[str]) -> bool:
-        lower = line.lower()
-        return any(keyword.lower() in lower for keyword in keywords)
 
     def _write_recovery_marker(self) -> None:
         if self._connection is None or self._session is None:
@@ -271,7 +272,8 @@ class LoggerController:
                 self._stats.dropped_lines += 1
             return
 
-        is_error = self._matches_error(line, session.error_keywords)
+        marker = classify_log_line(line, session.error_keywords)
+        is_error = marker.severity == "error"
         write_ok = writer.write_line(timestamp, line, is_error)
 
         with self._lock:
@@ -288,6 +290,8 @@ class LoggerController:
                 "timestamp": timestamp.strftime("%H:%M:%S"),
                 "line": line,
                 "is_error": is_error,
+                "severity": marker.severity,
+                "marker_terms": list(marker.matched_terms),
                 "write_ok": write_ok,
             }
         )

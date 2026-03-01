@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import tempfile
 
+from next_logger.application.log_markers import DEFAULT_CUSTOM_ERROR_KEYWORDS
 from next_logger.domain.models import ConnectionConfig, SessionConfig
 
 
@@ -63,7 +64,7 @@ def normalize_error_keywords(raw: tuple[str, ...] | list[str] | str) -> tuple[st
         items = [part.strip() for part in raw]
     filtered = [item for item in items if item]
     if not filtered:
-        return ("ERROR", "ERR", "NG")
+        return DEFAULT_CUSTOM_ERROR_KEYWORDS
     return tuple(filtered)
 
 
