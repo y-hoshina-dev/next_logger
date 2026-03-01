@@ -1,50 +1,16 @@
-////
-2025/05/24
-ver1.2
+# Logger Workspace (Current)
 
-| 機能           | 内容                                                          |
-| ------------ | ----------------------------------------------------------- |
-| **ファイル名入力**  | 製品名 + シリアル + コメント + 日付組合せ（空欄は除外）                         |
-| **保存先指定**    | GUIからフォルダを選択可能                                              |
-| **保存形式選択**   | `CSV`（表形式）, `JSON`（構造化データ）, `TXT`（ログ風）← **追加**              |
-| **ファイル保存方式** | 選択した形式で1行ごとに追記保存                                            |
-| **ファイル拡張子**  | `.csv`, `.json`, `.txt`（自動付加）                               |
-| **ログ内容**     | タイムスタンプ付きで記録：`timestamp, data`や`timestamp: data` など形式に応じて変化 |
-| **ステータス表示**  | GUI下部に現在の状態を表示（開始・停止・保存完了など）                                |
-| **ポート設定**    | COMポート選択＆ボーレート入力（9600など）                                    |
+This repository has been simplified to keep only the active implementation.
 
+## Current App
+- `next_logger/`
 
+## Run
+1. `cd next_logger`
+2. `python app.py`
 
-ver1.1
-| 機能      | 仕様                          |
-| ------- | --------------------------- |
-| ポート選択   | COMポート自動スキャン（`pyserial`）    |
-| ボーレート入力 | 自由入力（整数変換あり）                |
-| ログ読み取り  | `after()` による100msごとの非同期ループ |
-| ファイル保存  | `logs/`に日付付きファイルで追記保存       |
-| 停止処理    | ポートを閉じてループ停止                |
+## EXE
+- `next_logger/release/latest/next_logger.exe`
 
-
-
------
-serial_logger_GUI/
-├── app.py                ← メイン実行ファイル（GUI起動）
-├── logger/               ← ロガー関連の処理をモジュール化
-│   ├── __init__.py
-│   ├── serial_reader.py  ← シリアルポートの読み取り処理
-│   └── file_writer.py    ← ログファイルの保存処理v
-├── logs/                 ← ログファイルの保存先（.gitignore対象）
-├── config.ini            ← 設定ファイル（ポートなどを外部定義）
-├── .gitignore            ← ログ除外など
-├── requirements.txt      ← 必要なライブラリ一覧
-└── README.md             ← 簡単な説明書（任意）
------
-app.py:TkinterのGUIを起動するメインスクリプト。ロジック部分は logger モジュールに任せます。
-logger:実際の処理ロジックをまとめるフォルダ。モジュール化してGUIと分離します。
-serial_reader.py:pyserialを使ってシリアルデータを受信する関数を記述します。
-file_writer.py:	ログファイルにデータを書き込む関数を記述します。
-__init__.py:モジュールとしてインポート可能にするファイル（中身は空でもOK）
-logs/:	実行時に生成されるログファイルの保存フォルダ。.gitignoreで除外します。
-config.ini:設定値（COMポート名、保存先、ボーレートなど）を記述しておくと便利です。
-requirements.txt:必要なライブラリをまとめておくと他の環境で再現できます。
-README.md:簡単な使い方や依存関係の説明を記載しておくと親切です。
+## Notes
+- Legacy implementations and duplicate folders were removed.
