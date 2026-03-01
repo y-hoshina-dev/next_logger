@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot\..
 
 if (-not (Test-Path .venv\Scripts\python.exe)) {
@@ -25,17 +25,27 @@ if ($LASTEXITCODE -ne 0) { throw 'EXE build failed.' }
 $artifact = Join-Path (Get-Location) 'dist\next_logger.exe'
 if (-not (Test-Path $artifact)) { throw 'Build output not found: dist\\next_logger.exe' }
 
-$stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-$releaseDir = Join-Path (Get-Location) ("release\\" + $stamp)
-New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+$releaseRoot = Join-Path (Get-Location) 'release'
+$latestDir = Join-Path $releaseRoot 'latest'
+New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
 
-$releaseExe = Join-Path $releaseDir 'next_logger.exe'
-Copy-Item $artifact $releaseExe -Force
+# Keep only one canonical release output.
+Get-ChildItem -Path $releaseRoot -Directory -Force |
+  Where-Object { $_.Name -ne 'latest' } |
+  Remove-Item -Recurse -Force
+if (Test-Path $latestDir) { Remove-Item -Recurse -Force $latestDir }
+New-Item -ItemType Directory -Path $latestDir -Force | Out-Null
+
+$releaseExe = Join-Path $latestDir 'next_logger.exe'
+Move-Item -Path $artifact -Destination $releaseExe -Force
 
 $hash = (Get-FileHash $releaseExe -Algorithm SHA256).Hash
-$hashPath = Join-Path $releaseDir 'next_logger.sha256.txt'
+$hashPath = Join-Path $latestDir 'next_logger.sha256.txt'
 $hash | Set-Content -Encoding ASCII $hashPath
 
-Write-Host ("Build complete: " + $artifact)
-Write-Host ("Release copy:  " + $releaseExe)
+# Avoid duplicate EXE locations after build.
+if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+if (Test-Path next_logger.spec) { Remove-Item -Force next_logger.spec }
+
+Write-Host ("Build complete: " + $releaseExe)
 Write-Host ("SHA256:        " + $hash)

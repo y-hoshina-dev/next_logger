@@ -12,7 +12,7 @@
 
 ## 補助スクリプト
 - `scripts/release_check.ps1`: 単体テスト + 構文チェック
-- `scripts/build_exe.ps1`: Windows向けEXEビルド
+- `scripts/build_exe.ps1`: Windows向けEXEビルド（出力: `next_logger/release/latest/next_logger.exe`）
 
 ## 主な機能
 - 3ペインUI（接続設定 / ライブログ / セッション設定）
